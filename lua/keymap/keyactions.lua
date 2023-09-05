@@ -1621,22 +1621,22 @@ local keyActionsOrdersAdvanced = {
 }
 
 local keyActionsOrdersQueueBased = {
-    ['distribute_orders'] = {
+    ['spreadattack'] = {
         action = 'UI_Lua import("/lua/ui/game/hotkeys/distribute-queue.lua").DistributeOrders(true)',
         category = 'ordersQueueBased',
         wikiURL = 'Play/Game/Hotkeys/OrdersQueueManipulation#distribute-orders'
     },
-    ['shift_distribute_orders'] = {
+    ['shift_spreadattack'] = {
         action = 'UI_Lua import("/lua/ui/game/hotkeys/distribute-queue.lua").DistributeOrders(true)',
         category = 'ordersQueueBased',
         wikiURL = 'Play/Game/Hotkeys/OrdersQueueManipulation#distribute-orders'
     },
-    ['distribute_orders_context'] = {
+    ['spreadattack_context'] = {
         action = 'UI_Lua import("/lua/ui/game/hotkeys/distribute-queue.lua").DistributeOrdersOfMouseContext(true)',
         category = 'ordersQueueBased',
         wikiURL = 'Play/Game/Hotkeys/OrdersQueueManipulation#distribute-orders'
     },
-    ['shift_distribute_orders_context'] = {
+    ['shift_spreadattack_context'] = {
         action = 'UI_Lua import("/lua/ui/game/hotkeys/distribute-queue.lua").DistributeOrdersOfMouseContext(true)',
         category = 'ordersQueueBased',
         wikiURL = 'Play/Game/Hotkeys/OrdersQueueManipulation#distribute-orders'
@@ -1673,6 +1673,16 @@ local keyactionsOrdersContextBased = {
         action = 'UI_LUA import("/lua/keymap/misckeyactions.lua").SetWeaponPrioritiesToUnitType()',
         category = 'ordersContextBased',
         wikiURL = 'Play/Game/Hotkeys/OrdersMouseContext#cycle-templates'
+    },
+
+    ['cap'] = {
+        action = 'UI_LUA import("/lua/ui/game/hotkeys/capping.lua").CapHotkey()',
+        category = 'ordersContextBased',
+    },
+
+    ['shift_cap'] = {
+        action = 'UI_LUA import("/lua/ui/game/hotkeys/capping.lua").CapHotkey()',
+        category = 'ordersContextBased',
     },
 }
 
