@@ -54,6 +54,7 @@ AIBrain = Class(StandardBrain, EconomyComponent) {
         }
 
         self:ForkThread(self.GetBaseDebugInfoThread)
+        self:ForkThread(self.GetPlatoonDebugInfoThread)
         self:IMAPConfiguration()
     end,
 
@@ -63,11 +64,12 @@ AIBrain = Class(StandardBrain, EconomyComponent) {
         StandardBrain.OnBeginSession(self)
 
         -- requires navigational mesh
-        import("/lua/sim/NavUtils.lua").Generate()
+        import("/lua/sim/navutils.lua").Generate()
 
         -- requires these markers to exist
-        import("/lua/sim/MarkerUtilities.lua").GenerateExpansionMarkers()
-        import("/lua/sim/MarkerUtilities.lua").GenerateRallyPointMarkers()
+        import("/lua/sim/markerutilities.lua").GenerateExpansionMarkers()
+        import("/lua/sim/markerutilities.lua").GenerateNavalAreaMarkers()
+        import("/lua/sim/markerutilities.lua").GenerateRallyPointMarkers()
 
         -- requires these datastructures to understand the game
         self.GridReclaim = import("/lua/ai/gridreclaim.lua").Setup(self)
@@ -318,13 +320,37 @@ AIBrain = Class(StandardBrain, EconomyComponent) {
         end
     end,
 
+    ---@param self EasyAIBrain
+    ---@return AIBaseDebugInfo
+    GetPlatoonDebugInfoThread = function(self)
+        while true do
+            if GetFocusArmy() == self:GetArmyIndex() then
+                local units = DebugGetSelection()
+                if units and units[1] then
+                    local unit = units[1]
+                    if unit.AIPlatoonReference then
+                        Sync.AIPlatoonInfo = {
+                            PlatoonInfo = unit.AIPlatoonReference:GetDebugInfo(),
+                            EntityId = unit.EntityId,
+                            BlueprintId = unit.Blueprint.BlueprintId,
+                            Position = unit:GetPosition(),
+                        }
+                    end
+                end
+            end
+
+            WaitTicks(10)
+        end
+    end,
+
     --#endregion
 
     ---------------------------------------------------------------------------
     --#region Legacy functionality
-    --- All functions below solely exist because the code is too tightly coupled. We can't
-    --- remove them without drastically changing how the code base works. We can't do that
-    --- because it would break mod compatibility
+    
+    -- All functions below solely exist because the code is too tightly coupled. We can't
+    -- remove them without drastically changing how the code base works. We can't do that
+    -- because it would break mod compatibility
 
     ---@deprecated
     ---@param self AIBrain

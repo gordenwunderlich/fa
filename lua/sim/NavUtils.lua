@@ -29,6 +29,8 @@ local NavDatastructures = import("/lua/sim/navdatastructures.lua")
 -- upvalue scope for performance
 local TableGetn = table.getn
 
+local MathSqrt = math.sqrt
+
 -------------------------------------------------------------------------------
 --#region Debugging functionality
 
@@ -144,6 +146,14 @@ function Generate()
     end
 end
 
+--- Converts a world distance into grid distance
+---@param distance number
+---@return number
+function ToGridDistance(distance)
+    local sizeOfCell = NavGenerator.SizeOfCell()
+    return math.floor(distance / sizeOfCell) + 1
+end
+
 ---@param layer NavLayers
 ---@return NavGrid?
 ---@return 'InvalidLayer'?
@@ -158,8 +168,8 @@ end
 
 ---@param grid NavGrid
 ---@param position Vector
----@return CompressedLabelTreeLeaf?
----@return 'OutsideMap'?
+---@return NavLeaf | nil
+---@return 'OutsideMap' | nil
 local function FindLeaf(grid, position)
     -- check position argument
     local leaf = grid:FindLeafXZ(position[1], position[3])
@@ -196,7 +206,32 @@ local function FindLeaf(grid, position)
     return leaf
 end
 
----@param destination CompressedLabelTreeLeaf 
+---@param a NavLeaf
+---@param b NavLeaf
+---@return number
+local SquaredDistanceTo = function(a, b)
+    local dx = a.px - b.px
+    local dz = a.pz - b.pz
+    return dx * dx + dz * dz
+end
+
+---@param a NavLeaf
+---@param b NavLeaf
+---@return number
+local DistanceTo = function(a, b)
+    local dx = a.px - b.px
+    local dz = a.pz - b.pz
+    return MathSqrt(dx * dx + dz * dz)
+end
+
+---@param grid NavGrid
+---@param position Vector A position in world space
+---@return NavTree?
+local FindRoot = function(grid, position)
+    return grid:FindRootXZ(position[1], position[3])
+end
+
+---@param destination NavLeaf 
 ---@return Vector[]
 ---@return number   # Number of points in path
 ---@return number   # Distance of path
@@ -214,7 +249,7 @@ local function TracePath(destination)
     ---@type number
     local distance = 0
 
-    ---@type CompressedLabelTreeLeaf | nil
+    ---@type NavLeaf | nil
     local leaf = destination.From
 
     -- trace path from destination
@@ -225,7 +260,7 @@ local function TracePath(destination)
         head = head + 1
 
         -- keep track of distance
-        distance = distance + leaf:DistanceTo(leaf.From)
+        distance = distance + DistanceTo(leaf, leaf.From)
 
         leaf = leaf.From
     end
@@ -298,8 +333,53 @@ function CanPathTo(layer, origin, destination)
     end
 end
 
----@type NavPathToHeap
-local PathToHeap = NavDatastructures.NavPathToHeap()
+--- A more generous version of `CanPathTo`. Returns true when the root cell of the destination has a label that matches the label of the origin. Is in general less accurate
+---@param layer NavLayers
+---@param origin Vector
+---@param destination Vector
+---@return boolean?
+---@return ('SystemError' | 'NotGenerated' | 'InvalidLayer' | 'OutsideMap' | 'OriginOutsideMap' | 'OriginUnpathable' | 'DestinationOutsideMap' | 'Unpathable')?
+function CanPathToCell (layer, origin, destination)
+    -- check if generated
+    if not NavGenerator.IsGenerated() then
+        return nil, 'NotGenerated'
+    end
+
+    -- check layer argument
+    local grid = FindGrid(layer)
+    if not grid then
+        return nil, 'InvalidLayer'
+    end
+
+    -- check origin argument
+    local originLeaf = FindLeaf(grid, origin)
+    if not originLeaf then
+        return nil, 'OriginOutsideMap'
+    end
+
+    if originLeaf.Label == -1 then
+        return nil, 'OriginUnpathable'
+    end
+
+    if originLeaf.Label == 0 then
+        return nil, 'SystemError'
+    end
+
+    -- check destination argument
+    local destinationRoot = FindRoot(grid, destination)
+    if not destinationRoot then
+        return nil, 'DestinationOutsideMap'
+    end
+
+    if destinationRoot.Labels[originLeaf.Label] then
+        return true
+    else
+        return false, 'Unpathable'
+    end
+end
+
+---@type NavHeap
+local PathToHeap = NavDatastructures.NavHeap()
 
 ---@type number
 local PathToIdentifier = 1
@@ -331,13 +411,13 @@ function PathTo(layer, origin, destination)
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
-    local destinationLeaf = FindLeaf(grid, destination) --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
+    local destinationLeaf = FindLeaf(grid, destination) --[[@as NavLeaf]]
 
     -- 0th iteration of search
     originLeaf.From = nil
     originLeaf.AcquiredCosts = 0
-    originLeaf.TotalCosts = originLeaf:DistanceTo(destinationLeaf)
+    originLeaf.TotalCosts = DistanceTo(originLeaf, destinationLeaf)
     originLeaf.Seen = seenIdentifier
 
     -- start using the navigational heap
@@ -352,7 +432,7 @@ function PathTo(layer, origin, destination)
     -- search iterations
     while not PathToHeap:IsEmpty() do
 
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- final state
         if leaf == destinationLeaf then
@@ -369,8 +449,8 @@ function PathTo(layer, origin, destination)
                 end
                 neighbor.From = leaf
                 neighbor.Seen = seenIdentifier
-                neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor) + 2 + preferLargeNeighbor
-                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * destinationLeaf:DistanceTo(neighbor)
+                neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor) + 2 + preferLargeNeighbor
+                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * DistanceTo(destinationLeaf, neighbor)
 
                 PathToHeap:Insert(neighbor)
             else 
@@ -422,13 +502,13 @@ function PathToWithThreatThreshold(layer, origin, destination, aibrain, threatFu
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
-    local destinationLeaf = FindLeaf(grid, destination) --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
+    local destinationLeaf = FindLeaf(grid, destination) --[[@as NavLeaf]]
 
     -- 0th iteration of search
     originLeaf.From = nil
     originLeaf.AcquiredCosts = 0
-    originLeaf.TotalCosts = originLeaf:DistanceTo(destinationLeaf)
+    originLeaf.TotalCosts = DistanceTo(originLeaf, destinationLeaf)
     originLeaf.Seen = seenIdentifier
 
     -- start using the navigational heap
@@ -443,7 +523,7 @@ function PathToWithThreatThreshold(layer, origin, destination, aibrain, threatFu
     -- search iterations
     while not PathToHeap:IsEmpty() do
 
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- did we reach the destination?
         if leaf == destinationLeaf then
@@ -468,8 +548,8 @@ function PathToWithThreatThreshold(layer, origin, destination, aibrain, threatFu
                 -- update pathing state
                 neighbor.From = leaf
                 neighbor.Seen = seenIdentifier
-                neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor) + 2 + preferLargeNeighbor
-                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * destinationLeaf:DistanceTo(neighbor)
+                neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor) + 2 + preferLargeNeighbor
+                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * DistanceTo(destinationLeaf, neighbor)
 
                 -- include in search when threat is low enough
                 if root.Threat <= threatThreshold then
@@ -546,7 +626,7 @@ function GetLabelsofIMAP(layer, gx, gz)
     end
 
     -- check position argument
-    local root = grid:FindRootGridspaceXZ(gz - 1, gx - 1)
+    local root = grid:FindRootGridspaceXZ(gx - 1, gz - 1)
     if not root then
         return nil, 'OutsideMap'
     end
@@ -591,6 +671,111 @@ function GetTerrainLabel(layer, position)
     end
 
     return leaf.Label, nil
+end
+
+---@type NavTree[]
+local GetPositionsInRadiusCandidates = {}
+local GenericResultsCache = { }
+local GenericQueueCache = { }
+
+---@param layer NavLayers
+---@param position Vector
+---@param thresholdDistance number
+---@param thresholdSize? number
+---@return { [1]: number, [2]: number, [3]: number }?
+---@return number | ('NotGenerated' | 'InvalidLayer' | 'OutsideMap' | 'SystemError' | 'Unpathable' | 'NoData')?
+function GetPositionsInRadius(layer, position, thresholdDistance, thresholdSize, cache)
+    -- check if generated
+    if not NavGenerator.IsGenerated() then
+        return nil, 'NotGenerated'
+    end
+
+    -- check layer argument
+    local grid = FindGrid(layer)
+    if not grid then
+        return nil, 'InvalidLayer'
+    end
+
+    -- local scope for performance
+    local TableEmpty = table.empty
+    local TableGetn = table.getn
+    local FindRootGridspaceXZ = grid.FindRootGridspaceXZ
+
+    ---------------------------------------------------------------------------
+    -- find candidates that we can search for traversable leaves
+
+    local candidatesHead = 1
+    local candidates = GetPositionsInRadiusCandidates
+    local gx, gz = grid:ToGridSpace(position)
+    if not (gx and gz) then
+        return nil, 'OutsideMap'
+    end
+
+    local distanceInCells = ToGridDistance(thresholdDistance)
+    for lz = -distanceInCells, distanceInCells do
+        for lx = -distanceInCells, distanceInCells do
+            local neighbor = FindRootGridspaceXZ(grid, gx + lz, gz + lx)
+            if neighbor and not TableEmpty(neighbor.Labels) then
+                candidates[candidatesHead] = neighbor
+                candidatesHead = candidatesHead + 1
+            end
+        end
+    end
+
+    -- no neighboring cells found
+    if candidatesHead == 1 then
+        return nil, 'NoData'
+    end
+
+    ---------------------------------------------------------------------------
+    -- convert candidates to positions
+
+    -- local scope for performance
+    local GetSurfaceHeight = GetSurfaceHeight
+    local FindTraversableLeaves = candidates[1].FindTraversableLeaves
+
+    -- convert to a series of positions
+    local cacheHead = 1
+    cache = cache or { }
+    for k = 1, candidatesHead - 1 do
+        local candidate = candidates[k]
+
+        -- check if we have at least one traversable leaf
+        local leaves, leafCount = FindTraversableLeaves(candidate, thresholdSize, GenericResultsCache, GenericQueueCache)
+        local largest = leaves[1]
+        if not largest then
+            continue
+        end
+
+        for l = 1, leafCount do
+            local leaf = leaves[l]
+            local px = leaf.px
+            local pz = leaf.pz
+            local size = leaf.Size
+            local position = cache[cacheHead] or { }
+            position[1] = px 
+            position[2] = GetSurfaceHeight(px, pz)
+            position[3] = pz
+
+            -- this is useful information, but it causes issues with functions such as `IssueMove`
+            -- position[4] = size
+
+            cache[cacheHead] = position
+            cacheHead = cacheHead + 1
+        end
+    end
+
+    -- no traversable leaves found
+    if cacheHead == 1 then
+        return nil, 'NoData'
+    end
+
+    -- clean up cache
+    for k = cacheHead, TableGetn(cache) do
+        cache[k] = nil
+    end
+
+    return cache, cacheHead - 1
 end
 
 --- Returns the metadata of a label.
@@ -640,7 +825,7 @@ function DirectionsFrom(layer, origin, distance, sizeThreshold)
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
 
     -- sanity check
     if not originLeaf then
@@ -665,7 +850,7 @@ function DirectionsFrom(layer, origin, distance, sizeThreshold)
     PathToHeap:Insert(originLeaf)
 
     while not PathToHeap:IsEmpty() do
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- do not take into account small leafs as they clutter the results
         if leaf.Size < sizeThreshold then
@@ -697,7 +882,7 @@ function DirectionsFrom(layer, origin, distance, sizeThreshold)
             if neighbor.Label > 0 and neighbor.Seen != seenIdentifier then
                 neighbor.From = leaf
                 neighbor.Seen = seenIdentifier
-                neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor)
+                neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor)
                 neighbor.TotalCosts = 0
 
                 PathToHeap:Insert(neighbor)
@@ -720,7 +905,7 @@ function DirectionsFrom(layer, origin, distance, sizeThreshold)
         local dx = px - ox
         local dz = pz - oz
 
-        local d = math.sqrt(dx * dx + dz * dz)
+        local d = MathSqrt(dx * dx + dz * dz)
 
         local x = ox + distance / d * dx
         local z = oz + distance / d * dz
@@ -762,7 +947,7 @@ function RandomDirectionFrom(layer, origin, distance, sizeThreshold)
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
 
     -- sanity check
     if not originLeaf then
@@ -787,7 +972,7 @@ function RandomDirectionFrom(layer, origin, distance, sizeThreshold)
     PathToHeap:Insert(originLeaf)
 
     while not PathToHeap:IsEmpty() do
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- do not take into account small leafs as they clutter the results
         if leaf.Size < sizeThreshold then
@@ -819,7 +1004,7 @@ function RandomDirectionFrom(layer, origin, distance, sizeThreshold)
             if neighbor.Label > 0 and neighbor.Seen != seenIdentifier then
                 neighbor.From = leaf
                 neighbor.Seen = seenIdentifier
-                neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor)
+                neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor)
                 neighbor.TotalCosts = 0
 
                 PathToHeap:Insert(neighbor)
@@ -841,7 +1026,7 @@ function RandomDirectionFrom(layer, origin, distance, sizeThreshold)
     local dx = px - ox
     local dz = pz - oz
 
-    local d = math.sqrt(dx * dx + dz * dz)
+    local d = MathSqrt(dx * dx + dz * dz)
 
     local x = ox + distance / d * dx
     local z = oz + distance / d * dz
@@ -883,7 +1068,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
 
     -- sanity check
     if not originLeaf then
@@ -893,7 +1078,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
     -- compute direction we're trying to threat
     local tx = threat[1] - origin[1]
     local tz = threat[3] - origin[3]
-    local ed = 1 / (math.sqrt(tx * tx + tz * tz))
+    local ed = 1 / (MathSqrt(tx * tx + tz * tz))
     tx = ed * tx
     tz = ed * tz
 
@@ -915,7 +1100,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
     PathToHeap:Insert(originLeaf)
 
     while not PathToHeap:IsEmpty() do
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- add neighbors of leaf that is too close to the origin
         if leaf.AcquiredCosts < distance then
@@ -931,7 +1116,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
 
                     neighbor.From = leaf
                     neighbor.Seen = seenIdentifier
-                    neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor)
+                    neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor)
                     neighbor.TotalCosts = tx * dx + tz * dz
 
                     PathToHeap:Insert(neighbor)
@@ -959,7 +1144,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
         local dx = px - ox
         local dz = pz - oz
 
-        local d = math.sqrt(dx * dx + dz * dz)
+        local d = MathSqrt(dx * dx + dz * dz)
         local di = 1 / d
 
         local nx = di * dx
@@ -982,7 +1167,7 @@ function RetreatDirectionFrom(layer, origin, threat, distance)
     local dx = px - ox
     local dz = pz - oz
 
-    local d = math.sqrt(dx * dx + dz * dz)
+    local d = MathSqrt(dx * dx + dz * dz)
 
     if d < distance then
         distance = d
@@ -1031,13 +1216,13 @@ function DirectionTo(layer, origin, destination, distance)
     -- setup pathing
     local seenIdentifier = PathToGetUniqueIdentifier()
     local grid = FindGrid(layer)                        --[[@as NavGrid]]
-    local originLeaf = FindLeaf(grid, origin)           --[[@as CompressedLabelTreeLeaf]]
-    local destinationLeaf = FindLeaf(grid, destination) --[[@as CompressedLabelTreeLeaf]]
+    local originLeaf = FindLeaf(grid, origin)           --[[@as NavLeaf]]
+    local destinationLeaf = FindLeaf(grid, destination) --[[@as NavLeaf]]
 
     -- 0th iteration of search
     originLeaf.From = nil
     originLeaf.AcquiredCosts = 0
-    originLeaf.TotalCosts = originLeaf:DistanceTo(destinationLeaf)
+    originLeaf.TotalCosts = DistanceTo(originLeaf, destinationLeaf)
     originLeaf.Seen = seenIdentifier
 
     -- start using the navigational heap
@@ -1052,7 +1237,7 @@ function DirectionTo(layer, origin, destination, distance)
     -- search iterations
     while not PathToHeap:IsEmpty() do
 
-        local leaf = PathToHeap:ExtractMin() --[[@as CompressedLabelTreeLeaf]]
+        local leaf = PathToHeap:ExtractMin() --[[@as NavLeaf]]
 
         -- final state
         if leaf == destinationLeaf then
@@ -1069,8 +1254,8 @@ function DirectionTo(layer, origin, destination, distance)
                 end
                 neighbor.From = leaf
                 neighbor.Seen = seenIdentifier
-                neighbor.AcquiredCosts = leaf.AcquiredCosts + leaf:DistanceTo(neighbor) + 2 + preferLargeNeighbor
-                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * destinationLeaf:DistanceTo(neighbor)
+                neighbor.AcquiredCosts = leaf.AcquiredCosts + DistanceTo(leaf, neighbor) + 2 + preferLargeNeighbor
+                neighbor.TotalCosts = neighbor.AcquiredCosts + 0.25 * DistanceTo(destinationLeaf, neighbor)
 
                 PathToHeap:Insert(neighbor)
             end
@@ -1099,7 +1284,7 @@ function DirectionTo(layer, origin, destination, distance)
         waypoint[3] = leaf.pz
 
         -- keep track of distance
-        length = length + leaf:DistanceTo(leaf.From)
+        length = length + DistanceTo(leaf, leaf.From)
 
         -- continue down the tree
         leaf = leaf.From
@@ -1133,7 +1318,7 @@ function DirectionTo(layer, origin, destination, distance)
         local waypoint = path[k]
         local dx = waypoint[1] - lastWaypoint[1]
         local dz = waypoint[3] - lastWaypoint[3]
-        local d = math.sqrt(dx * dx + dz * dz)
+        local d = MathSqrt(dx * dx + dz * dz)
 
         if d + taken < distance then
             taken = taken + d
@@ -1192,3 +1377,4 @@ end
 function IsInBuildableArea(origin)
     return IsInPlayableArea(origin, 8)
 end
+

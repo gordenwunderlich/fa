@@ -46,9 +46,9 @@ if SetProcessPriority and GetProcessAffinityMask and SetProcessAffinityMask then
     -- affinity values acts like a bit mask, we retrieve the mask and shift it if we think there are sufficient computing units
     local success, processAffinityMask, systemAffinityMask = GetProcessAffinityMask();
     if success then
-        -- system has 6 (logical) threads or more, skip first two computing units
-        if systemAffinityMask >= 63 then
-            processAffinityMask = systemAffinityMask & (systemAffinityMask << 2)
+        -- system has 6 (logical) computing units or more, skip first two computing units
+        if (systemAffinityMask >= 63) and (processAffinityMask == systemAffinityMask) then
+            processAffinityMask = systemAffinityMask - 3
         end
 
         -- update the afinity mask
@@ -195,13 +195,6 @@ allowedAssetsScd["editor.scd"] = false      -- Unused
 allowedAssetsScd["ambience.scd"] = false    -- Empty 
 allowedAssetsScd["sc_music.scd"] = true
 allowedAssetsScd = LowerHashTable(allowedAssetsScd)
-
--- typical backwards compatible packages
-local allowedAssetsNxt = { }
-allowedAssetsNxt["kyros.nxt"] = true
-allowedAssetsNxt["advanced strategic icons.nxt"] = true
-allowedAssetsNxt["advanced_strategic_icons.nxt"] = true
-allowedAssetsNxt = LowerHashTable(allowedAssetsNxt)
 
 -- default wave banks to prevent collisions
 local soundsBlocked = { }

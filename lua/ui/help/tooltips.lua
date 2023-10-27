@@ -262,6 +262,18 @@ Tooltips = {
         title = "<LOC tooltipui0307>Help Tips",
         description = "<LOC tooltipui0344>Click on the question mark icon to view detailed suggestions on how to play Supreme Commander: Forged Alliance",
     },
+    external_factory = {
+        title = "<LOC tooltipui0750>Mobile Factory",
+        description = "<LOC tooltipui0751>Select attached factory",
+    },
+    external_factory_unit = {
+        title = "<LOC tooltipui0750>Mobile Factory",
+        description = "<LOC tooltipui0752>Select base unit",
+    },
+    auto_deploy = {
+        title = "<LOC tooltipui0478>Deploy",
+        description = "<LOC tooltipui0753>Right click to automatically deploy constructed units",
+    },
     drone = {
         title = "<LOC tooltipui0411>Select Drone",
         description = "<LOC tooltipui0412>Right click to toggle auto-assist",
@@ -644,6 +656,12 @@ Tooltips = {
         title = "<LOC ASSIST_TO_UNPAUSE_TITLE>Assist to Unpause",
         description = "<LOC ASSIST_TO_UNPAUSE_DESCRIPTION>When enabled structures automatically unpause as engineers start assisting it.",
     },
+
+    options_assist_to_copy_command_queue = {
+        title = "<LOC ASSIST_TO_UNPAUSE_TITLE>Assist to copy command queue",
+        description = "<LOC ASSIST_TO_UNPAUSE_DESCRIPTION>When enabled, engineers in the selection will try to copy the command queue of the engineer you issue an assist order for. \r\n\r\nRequires you to hold 'Control'",
+    },
+
     options_mp_taunt_head = {
         title = "<LOC OPTIONS_0119>MP Taunt Head",
         description = "<LOC OPTIONS_0120>Select which 3D head is displayed when taunts are used in multiplayer",
@@ -876,7 +894,11 @@ Tooltips = {
     },
     options_structure_capping_feature_01 = {
         title = "<LOC options_structure_capping_feature_01_title>Assist to cap",
-        description = "<LOC options_structure_capping_feature_01_description>Assist an extractor to cap it with storages and / or fabricators",
+        description = "<LOC options_structure_capping_feature_01_description>Assist an extractor to cap it with storages",
+    },
+    options_structure_ringing_extractors_fabs = {
+        title = "<LOC options_structure_ringing_extractors_fabs_title>Assist to cap",
+        description = "<LOC options_structure_ringing_extractors_fabs_description>Assist an extractor to cap it with 4 or 8 fabricators",
     },
     options_structure_ringing_artillery = {
         title = "<LOC options_structure_ringing_artillery_title>Assist to cap",
@@ -1029,11 +1051,11 @@ Tooltips = {
     },
     options_cursor_depth_scanning = {
         title = "<LOC WATER_DEPTH_ASSISTANCE_TITLE>Water depth indication",
-        description = "<LOC WATER_DEPTH_ASSISTANCE_DESCRIPTION>When enabled, adds visual elements to visualize the offset between the water surface and the ocean floor at the position of the cursor.",
+        description = "<LOC WATER_DEPTH_ASSISTANCE_DESCRIPTION>When enabled, adds visual elements to visualize the offset between the water surface and the ocean floor at the position of the cursor. A separate indicator turns red when naval units are guaranteed to not be able to path at the location due to lack of depth.",
     },
     options_cursor_hover_scanning = {
         title = "<LOC PLANE_HEIGHT_ASSISTANCE_TITLE>Plane height indication",
-        description = "<LOC WATER_DEPTH_ASSISTANCE_DESCRIPTION>When enabled, adds visual elements to visualize the offset between the terrain surface and the (expected) height of the selected air unit at the position of the cursor. \r\nIs only applied when you have one unit selected.",
+        description = "<LOC PLANE_HEIGHT_ASSISTANCE_DESCRIPTION>When enabled, adds visual elements to visualize the offset between the terrain surface and the (expected) height of the selected air unit at the position of the cursor. \r\nIs only applied when you have one unit selected.",
     },
     options_share_mouse = {
         title = '<LOC OPTIONS_0305>Show Player Cursor Locations for Observers',

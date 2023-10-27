@@ -111,18 +111,6 @@ UEL0401 = ClassUnit(TMobileFactoryUnit, ExternalFactoryComponent) {
     end,
 
     ---@param self UEL0401
-    OnPaused = function(self)
-        TMobileFactoryUnit.OnPaused(self)
-        ExternalFactoryComponent.OnPaused(self)
-    end,
-
-    ---@param self UEL0401
-    OnUnpaused = function(self)
-        TMobileFactoryUnit.OnUnpaused(self)
-        ExternalFactoryComponent.OnUnpaused(self)
-    end,
-
-    ---@param self UEL0401
     ---@param new Layer
     ---@param old Layer
     OnLayerChange = function(self, new, old)
@@ -289,7 +277,7 @@ UEL0401 = ClassUnit(TMobileFactoryUnit, ExternalFactoryComponent) {
 
             -- shuffle the order
             for k = explosionBoneCount, 1, -1 do
-                local j = (Random(1, k)) ^ 0;
+                local j = math.floor(Random(1, k));
                 local value = explosionBones[j];
                 explosionBones[j] = explosionBones[k];
                 explosionBones[k] = value;

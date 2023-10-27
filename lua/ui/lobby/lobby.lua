@@ -2343,6 +2343,7 @@ local function UpdateGame()
                 function()
                     -- store in preferences so that we can retrieve it during blueprint loading
                     SetPreference('PreGameData', preGameData)
+                    SavePreferences()
                 end
             )
 
@@ -2357,8 +2358,8 @@ local function UpdateGame()
             -- hence we can not rely on mod and / or lobby option
             -- changes to be present.
 
-            local mods = Mods.GetGameMods(gameInfo.GameMods)
-            PrefetchSession(scenarioInfo.map, mods, true)
+            -- local mods = Mods.GetGameMods(gameInfo.GameMods)
+            -- PrefetchSession(scenarioInfo.map, mods, true)
 
         else
             AlertHostMapMissing()
@@ -2515,7 +2516,7 @@ function ShowGameQuality()
 
     if quality > 0 then
         gameInfo.GameOptions.Quality = quality
-        GUI.GameQualityLabel:StreamText(LOCF("<LOC lobui_0418>Game quality: %s%%", quality), 20)
+        GUI.GameQualityLabel:StreamText(LOCF("<LOC lobui_0418>Game quality: %s%%", string.format("%.2f",quality)), 20)
     end
 end
 
@@ -5135,7 +5136,15 @@ local MessageHandlers = {
     },
 
     AddPlayer = {
-        Accept = AmHost,
+        Accept = function(data)
+            return data.PlayerOptions.OwnerID and 
+                data.PlayerOptions.OwnerID == data.SenderID and
+                not FindNameForID(data.SenderID) and
+                lobbyComm:IsHost()
+        end,
+        Reject = function(data)
+            lobbyComm:EjectPeer(data.SenderID, "Invalid player data.")
+        end,
         Handle = function(data)
             -- try to reassign the same slot as in the last game if it's a rehosted game, otherwise give it an empty
             -- slot or move it to observer
@@ -5499,6 +5508,7 @@ function InitLobbyComm(protocol, localPort, desiredPlayerName, localPlayerUID, n
 
     lobbyComm.DataReceived = function(self, data)
 
+        
         -- Decide if we should just drop the packet. Violations here are usually people using a
         -- modified lobby.lua to try to do stupid shit.
         if not MessageHandlers[data.Type] then
@@ -5509,6 +5519,8 @@ function InitLobbyComm(protocol, localPort, desiredPlayerName, localPlayerUID, n
         -- No defined validator is taken to be always-accept.
         if not MessageHandlers[data.Type].Accept or MessageHandlers[data.Type].Accept(data) then
             MessageHandlers[data.Type].Handle(data)
+        elseif MessageHandlers[data.Type].Reject then
+            MessageHandlers[data.Type].Reject(data)
         else
             WARN("Rejected message of type " .. data.Type .. " from " .. FindNameForID(data.SenderID))
         end
@@ -5981,7 +5993,7 @@ function CPUBenchmark()
             k = i * i   --Multiplication
             l = k / j   --Division
             m = j - i   --Subtraction
-            j = i ^ 4   --Power
+            j = math.pow(i, 4)   --Power
             l = -i      --Negation
             m = {'1234567890', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', true} --Create Table
             TableInsert(m, '1234567890')     --Insert Table Value

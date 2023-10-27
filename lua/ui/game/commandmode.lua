@@ -118,7 +118,6 @@ end
 ---@param newCommandMode CommandMode
 ---@param data CommandModeData
 function StartCommandMode(newCommandMode, data)
-
     -- clean up previous command mode
     if commandMode then
         EndCommandMode(true)
@@ -137,7 +136,6 @@ end
 --- Called when the command mode ends and deconstructs all the data.
 ---@param isCancel boolean set when we're at the end of (a sequence of) order(s), is usually always true
 function EndCommandMode(isCancel)
-
     if ignoreSelection then
         return
     end
@@ -182,8 +180,12 @@ function CacheAndClearCommandMode()
 end
 
 --- Restores the cached command mode
-function RestoreCommandMode()
+---@param ignorePreviousCommands? boolean when set resets the command mode as if no commands were issued
+function RestoreCommandMode(ignorePreviousCommands)
     if cachedCommandMode and cachedModeData then
+        if ignorePreviousCommands then
+            issuedOneCommand = false
+        end
         StartCommandMode(cachedCommandMode, cachedModeData)
     end
 end
@@ -269,6 +271,7 @@ local function CheatSpawn(command, data)
             veterancy = data.vet,
             CreateTarmac = data.CreateTarmac,
             MeshOnly = data.MeshOnly,
+            ShowRaisedPlatforms = data.ShowRaisedPlatforms,
             UnitIconCameraMode = data.UnitIconCameraMode,
         }
     }, true)
@@ -348,7 +351,7 @@ local function OnGuardUnpause(guardees, target)
                             target.ThreadUnpauseCandidates = nil
                             target.ThreadUnpause = nil
                             break
-                            ;end
+                            ; end
 
                         WaitSeconds(1.0)
                         target = GetUnitById(id)
@@ -365,6 +368,21 @@ local function OnGuardUnpause(guardees, target)
     end
 end
 
+---@param guardees UserUnit[]
+---@param unit UserUnit
+local function OnGuardCopy(guardees, unit)
+    local prefs = Prefs.GetFromCurrentProfile('options.assist_to_copy_command_queue')
+    local engineers = EntityCategoryFilterDown(categories.ENGINEER, guardees)
+    if table.getn(engineers) > 0 and
+        (prefs == 'OnlyEngineers') and
+        EntityCategoryContains(categories.ENGINEER, unit)
+    then
+        if IsKeyDown('Control') then
+            SimCallback({ Func = 'CopyOrders', Args = { Target = unit:GetEntityId(), ClearCommands = true } }, true)
+        end
+    end
+end
+
 --- Is called when a unit receies a guard / assist order
 ---@param guardees UserUnit[]
 ---@param unit UserUnit
@@ -372,6 +390,7 @@ local function OnGuard(guardees, unit)
     if unit:GetArmy() == GetFocusArmy() then
         OnGuardUpgrade(guardees, unit)
         OnGuardUnpause(guardees, unit)
+        OnGuardCopy(guardees, unit)
     end
 end
 
@@ -436,7 +455,7 @@ function OnCommandIssued(command)
 
             local target = GetUnitById(command.Target.EntityId) --[[@as UserUnit]]
             local units = command.Units --[[@as (UserUnit[])]]
-            import("/lua/ui/game/hotkeys/capping.lua").Cap(target, units)
+            import("/lua/ui/game/hotkeys/capping.lua").AssistToCap(target, units)
         end
 
         -- called when:
